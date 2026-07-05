@@ -1,0 +1,59 @@
+# Codec training entry point (RAEv2 temporal-downsampling): reconstruction training (video-only)
+# with periodic validation and W&B logging. Data is read through
+# `mira.data.training_loader.create_loader`.
+defaults:
+  - _self_
+  - model: raev2_codec_tdown
+  - dataset: rocket_league
+
+# The action vocabulary travels with the dataset; expose it at the top level for the loader.
+actions: ${dataset.actions}
+
+wandb:
+  entity: null
+  project: mira-codec
+  name: codec
+  group: null
+  mode: online  # "disabled" to turn off, "offline" to log locally only
+  remove_old_runs: false
+
+run:
+  seed: 28
+  steps: 250_001
+  batch_size: 4
+  checkpoint_every: "5%"
+  checkpoint_keep_recent: 1
+  checkpoint_keep_permanent_every: -1
+  log_every: "1%"
+  output_dir: "train_codec_logs"
+  compile: true
+  # Crash recovery: path or W&B URL to resume the full training state from (continues the step
+  # counter). Mutually exclusive with finetune_from.
+  continue_from: null
+  # Fine-tuning: path or W&B URL to warm-start the weights from; optimizer/scheduler/step start
+  # fresh. Mutually exclusive with continue_from.
+  finetune_from: null
+  # The latent mean/std are tracked with an exponential moving average using this decay.
+  latents_ema_decay: 0.99
+
+dataloader:
+  num_workers: 6
+  shuffle_buffer_size: 100
+
+validation:
+  batch_size: null  # null to use the same batch size as training
+  val_first: true
+  val_n_samples: 1024
+  val_every: "2%"
+
+optim:
+  optimizer:
+    lr: 1e-4
+    betas: [0.9, 0.95]
+    weight_decay: 0.1
+  scheduler:
+    warmup_steps: 1000
+    constant_steps: 0
+    decay_steps: 249_000  # 0 to disable cosine decay; otherwise ~run.steps - warmup_steps
+    min_lr: 1e-6
+  model_ema_decay: 0.9999  # 0.0 to disable

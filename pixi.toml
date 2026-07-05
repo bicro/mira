@@ -1,0 +1,53 @@
+# Standalone environment for mira.
+#
+# pixi provides FFmpeg 7 as a system dependency and puts its shared libraries on LD_LIBRARY_PATH so
+# torchcodec can load them at runtime (a bare uv/pip env lacks these, which is the libtorchcodec /
+# libavutil load error). Python dependencies (incl. torch/torchcodec) are installed editable from
+# pyproject.toml via uv.
+#
+#   pixi run setup      # one-time: install mira + extras into the env (GPU/CUDA torch)
+#   pixi run setup-cpu  # same, but CPU-only torch (no GPU on this machine)
+#   pixi run test       # pytest
+#   pixi run verify     # format + lint + typecheck + test
+#
+# `setup` installs a CUDA (cu128) build of torch by default so training runs on the GPU out of the
+# box; use `setup-cpu` on a machine without an NVIDIA GPU. torch and torchcodec are pinned to the
+# validated pair -- torch 2.8 + torchcodec 0.7.0 (CPU decode) + FFmpeg 7 -- for two reasons: video is
+# decoded on the dataloader workers (CPU torchcodec, whose ABI must match torch), and this is the
+# combination `torch.compile` is stable on. Newer torch (e.g. 2.11) hits a Triton/inductor
+# illegal-memory-access compiling the codec graph, so don't unpin it without re-checking compile.
+#
+# pip-only users don't need pixi: `pip install mira[decode,viz]` into any environment that
+# already has a compatible FFmpeg.
+
+[workspace]
+authors = ["moboehle <moritzboehle@me.com>"]
+name = "mira"
+version = "0.0.1"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[activation.env]
+# Let torchcodec find pixi's FFmpeg shared libraries at runtime.
+LD_LIBRARY_PATH = "$PIXI_PROJECT_ROOT/.pixi/envs/default/lib:$LD_LIBRARY_PATH"
+
+[dependencies]
+python = "3.12.*"
+ffmpeg = ">=7,<8"
+uv = "*"
+
+[tasks]
+# GPU (default): CUDA (cu128) torch + CPU-decode torchcodec (see the header note on the torchcodec
+# pin). torchcodec is installed in a second step from the CPU index: --torch-backend cu128 otherwise
+# pulls the CUDA-decode torchcodec build, which needs CUDA NPP libs (libnppicc.so.12) that are absent
+# on login/CPU nodes, so libtorchcodec fails to load there. --no-deps keeps torch on the cu128 build.
+setup = "uv pip install --python $CONDA_PREFIX/bin/python --torch-backend cu128 -e '.[viz,notebook,hf,train,dev]' 'torch==2.8.*' && uv pip install --python $CONDA_PREFIX/bin/python --no-deps torchcodec==0.7.0 --index-url https://download.pytorch.org/whl/cpu"
+# CPU-only fallback for machines without an NVIDIA GPU.
+setup-cpu = "uv pip install --python $CONDA_PREFIX/bin/python --torch-backend cpu -e '.[decode,viz,notebook,hf,train,dev]' 'torch==2.8.*' torchcodec==0.7.0"
+explore = "marimo run examples/explore.py"
+edit = "marimo edit --headless --port 2718 examples/explore.py"
+test = "pytest -q"
+format = "ruff format src tests"
+lint = "ruff check src tests"
+typecheck = "pyright src tests"
+verify = { depends-on = ["format", "lint", "typecheck", "test"] }
