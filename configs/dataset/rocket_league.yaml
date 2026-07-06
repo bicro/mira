@@ -1,0 +1,22 @@
+# Rocket League dataset. Single-player by default (n_players=1) for the codec; the multiplayer
+# world model overrides n_players=4. The data ships separate train/ and test/ splits; point
+# train_index/test_index at the local split directories (each holding index.json plus the shards
+# it references, flat or in numbered subfolders)
+# or fetch them from the Hub via `mira.data.RocketScienceDataset.from_hub(split=...)`.
+defaults:
+  - /actions@actions: rocket_league
+  - _self_
+
+# Local paths to the split directories (or their index.json). Override on the command line, e.g.
+# `dataset.train_index=/path/to/train dataset.test_index=/path/to/test`.
+train_index: null
+test_index: null
+
+n_players: 1          # 1 for the codec; 4 for the multiplayer world model.
+# Default frame rate clips are downsampled to. The training entrypoints override the frame rate
+# from the model config (codec: `encoder.video.fps`=20; world model: `video.fps`=20), and the
+# world model samples actions at `actions.target_fps` (20). With both rates at 20 this is one
+# action per video frame (the released default); the action rate can be decoupled via the knob.
+target_fps: 20
+frame_size: null      # native decoded size; set to [H, W] to resize decoded frames.
+exclude_replays: false  # set true for evaluation (drops clips overlapping a goal-replay span).

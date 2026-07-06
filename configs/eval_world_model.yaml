@@ -1,0 +1,30 @@
+# Offline world-model evaluation entry point: the world-model metrics block only (DINO/latent drift
+# + Frechet DINO/Inception curves + per-frame PSNR/LPIPS/SSIM). The checkpoint carries its own model
+# and dataset config, so this only configures how the eval is run. Video-only (no audio metrics).
+defaults:
+  - _self_
+
+world_model_metrics:
+  _target_: mira.training.metrics.world_model_metrics.WorldModelMetricsConfig
+  _convert_: all  # pass plain dicts to the Pydantic config, not OmegaConf nodes
+  # Filled in at eval time (path or W&B URL to the checkpoint, and an output directory).
+  checkpoint: null
+  output_dir: null
+  # Inference (rollout) settings; fields not listed keep their WorldModelInferenceConfig defaults.
+  inference:
+    schedule_type: linear
+    noise_level: 0.0
+  num_samples: 2048
+  per_device_batch_size: 1
+  # 4 s eval on the shipped 4 s (80-frame @ 20 fps) chunks. With temporal_downsampling=2 the eval
+  # clip is n_context_frames + num_unrolled_frames*2 = 38 + 20*2 = 78 frames (<= 80, even so it
+  # encodes cleanly): 38 context frames (~2 s) then a 20-latent-frame (~2 s) rollout. 38 is a
+  # multiple of 2 and stays under both shipped model windows (video.timesteps 40 single / 80 multi).
+  n_context_frames: 38
+  num_unrolled_frames: 20
+  drift_metric_frames: 20
+  fdd_slice_frames: 10  # per-slice Frechet width -> 20/10 = 2 slices (at 10, 20 latent frames)
+  eval_temporal_downsampling: null
+  compile: false
+  dino_max_chunk_size: 128  # max frames per DINO forward pass, reduces peak memory
+  num_viz_samples: 8  # how many eval samples to visualize (logged to W&B)
